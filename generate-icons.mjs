@@ -1,0 +1,19 @@
+import fs from 'fs'
+
+// Simple scalable SVG icon featuring the Habit Tracker Shield & Flame
+const svgContent = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#020617"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#10b981" stroke-width="12" opacity="0.3"/>
+  <path d="M256 96 C180 96 140 144 140 240 C140 352 256 416 256 416 C256 416 372 352 372 240 C372 144 332 96 256 96 Z" fill="#10b981" opacity="0.15" stroke="#10b981" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M256 160 C256 160 216 216 216 264 C216 296 234 320 256 320 C278 320 296 296 296 264 C296 216 256 160 256 160 Z" fill="#10b981"/>
+</svg>
+`
+
+if (!fs.existsSync('./public')) {
+  fs.mkdirSync('./public')
+}
+
+// Write high-res SVG and standard fallback icons
+fs.writeFileSync('./public/icon.svg', svgContent.trim())
+console.log('Generated public/icon.svg successfully!')

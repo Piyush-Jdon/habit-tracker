@@ -3,6 +3,7 @@
 import React from 'react'
 import { Check, Flame, Plus, Minus } from 'lucide-react'
 import confetti from 'canvas-confetti'
+import { triggerHaptic } from '@/utils/haptics'
 
 interface HabitCardProps {
   habit: any
@@ -17,16 +18,21 @@ export default function HabitCard({ habit, log, onProgress }: HabitCardProps) {
 
   const handleBinaryToggle = () => {
     if (!isCompleted) {
+      triggerHaptic('success')
       confetti({ particleCount: 35, spread: 45, origin: { y: 0.8 } })
       onProgress(habit.id, 1)
-    } else {
+  } else {
+      triggerHaptic('light')
       onProgress(habit.id, -1)
     }
   }
 
   const handleIncrement = (amount: number) => {
     if (currentValue + amount >= habit.target_value && !isCompleted) {
+      triggerHaptic('success')
       confetti({ particleCount: 40, spread: 50, origin: { y: 0.8 } })
+    } else {
+      triggerHaptic('light')
     }
     onProgress(habit.id, amount)
   }
