@@ -1,16 +1,27 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { Shield, Plus, LogOut, Zap, Award } from 'lucide-react'
+import confetti from 'canvas-confetti'
 import HabitCard from '@/components/HabitCard'
 import Heatmap from '@/components/Heatmap'
 import DailyProgressBar from '@/components/DailyProgressBar'
 import NewHabitModal from '@/components/NewHabitModal'
 import UpgradeModal from '@/components/UpgradeModal'
+import { sounds } from '@/utils/sound'
 
 const CATEGORIES = ['All', 'General', 'Fitness', 'Productivity', 'Mindset', 'Health']
 const FREE_HABIT_LIMIT = 5
+
+// Local calendar date helper (prevents UTC drift)
+function getLocalTodayDate(): string {
+  const d = new Date()
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
 
 export default function Home() {
   const [user, setUser] = useState<any>(null)
@@ -24,19 +35,18 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All')
   const [milestoneMessage, setMilestoneMessage] = useState<string | null>(null)
 
+  const hasCelebrated100Ref = useRef(false)
   const supabase = createClient()
 
   useEffect(() => {
-    setToday(new Date().toISOString().split('T')[0])
+    setToday(getLocalTodayDate())
   }, [])
 
   const loadData = useCallback(async (userId: string, currentDate: string) => {
     if (!currentDate) return
 
-    // 1. Evaluate missed days & streak freezes
     await supabase.rpc('evaluate_daily_streak_freezes', { p_today: currentDate })
 
-    // 2. Fetch Profile
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
@@ -44,7 +54,6 @@ export default function Home() {
       .single()
     setProfile(profileData)
 
-    // 3. Fetch Active Habits
     const { data: habitData } = await supabase
       .from('habits')
       .select('*')
@@ -53,7 +62,6 @@ export default function Home() {
       .order('created_at', { ascending: true })
     setHabits(habitData || [])
 
-    // 4. Fetch Logs for Heatmap & today's status
     const { data: logData } = await supabase
       .from('habit_logs')
       .select('*')
@@ -170,6 +178,34 @@ export default function Home() {
     if (user && today) loadData(user.id, today)
   }
 
+  const todayLogs = logs.filter((l) => l.log_date === today)
+  const filteredHabits = selectedCategory === 'All'
+    ? habits
+    : habits.filter((h) => h.category === selectedCategory)
+
+  const completedTodayCount = habits.filter((h) => {
+    const log = todayLogs.find((l) => l.habit_id === h.id)
+    if (h.habit_type === 'negative') {
+      return (log?.current_value ?? 0) === 0
+    }
+    return (log?.current_value ?? 0) >= (h.target_value ?? 1)
+  }).length
+
+  // Trigger celebration when reaching 100% daily completion
+  useEffect(() => {
+    if (habits.length > 0 && completedTodayCount === habits.length && !hasCelebrated100Ref.current) {
+      hasCelebrated100Ref.current = true
+      confetti({
+        particleCount: 100,
+        spread: 80,
+        origin: { y: 0.5 },
+      })
+      sounds.playSuccess()
+    } else if (completedTodayCount < habits.length) {
+      hasCelebrated100Ref.current = false
+    }
+  }, [completedTodayCount, habits.length])
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
@@ -206,20 +242,6 @@ export default function Home() {
       </div>
     )
   }
-
-  const todayLogs = logs.filter((l) => l.log_date === today)
-  const filteredHabits = selectedCategory === 'All'
-    ? habits
-    : habits.filter((h) => h.category === selectedCategory)
-
-  // Calculate completion velocity across active habits
-  const completedTodayCount = habits.filter((h) => {
-    const log = todayLogs.find((l) => l.habit_id === h.id)
-    if (h.habit_type === 'negative') {
-      return (log?.current_value ?? 0) === 0
-    }
-    return (log?.current_value ?? 0) >= (h.target_value ?? 1)
-  }).length
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 pb-28">
@@ -262,7 +284,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Milestone celebration alert */}
       {milestoneMessage && (
         <div className="max-w-md mx-auto px-4 mt-3">
           <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl p-3 flex items-center gap-2.5 text-xs text-emerald-300 animate-fadeIn">
@@ -273,16 +294,13 @@ export default function Home() {
       )}
 
       <div className="max-w-md mx-auto px-4 mt-5 space-y-4">
-        {/* Heatmap Overview */}
         <Heatmap logs={logs} />
 
-        {/* Daily Completion Velocity Bar */}
         <DailyProgressBar
           total={habits.length}
           completed={completedTodayCount}
         />
 
-        {/* Habits Section */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -302,7 +320,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-none">
             {CATEGORIES.map((cat) => (
               <button
@@ -320,7 +337,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Habit Cards List */}
           <div className="space-y-3">
             {filteredHabits.length === 0 ? (
               <div className="p-8 text-center border border-dashed border-slate-800 rounded-2xl">
@@ -342,7 +358,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Creation Modal */}
       <NewHabitModal
         isOpen={isModalOpen}
         initialCategory={selectedCategory !== 'All' ? selectedCategory : 'General'}
@@ -350,7 +365,6 @@ export default function Home() {
         onSave={handleCreateHabit}
       />
 
-      {/* Upgrade & Paywall Modal */}
       <UpgradeModal
         isOpen={isUpgradeOpen}
         onClose={() => setIsUpgradeOpen(false)}

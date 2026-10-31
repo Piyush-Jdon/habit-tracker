@@ -27,7 +27,6 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
   const isQuantifiable = targetValue > 1 && !isNegative
   const streak = habit?.current_streak ?? 0
 
-  // Dynamic Flame Color based on streak milestones
   const getFlameBadge = () => {
     if (streak >= 30) {
       return {
@@ -101,11 +100,11 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
   }
 
   const handleDelete = async () => {
+    setShowMenu(false)
     if (confirm(`Archive habit "${habitTitle}"?`)) {
       triggerHaptic('medium')
       await onArchive(habit.id)
     }
-    setShowMenu(false)
   }
 
   const progressPercent = isNegative
@@ -138,9 +137,13 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
 
           <div>
             <div className="flex items-center gap-2">
-              <h3 className={`text-sm font-semibold transition-colors duration-200 ${
-                isCompleted ? 'text-slate-300 line-through decoration-slate-600' : 'text-slate-100'
-              }`}>
+              <h3
+                className={`text-sm font-semibold transition-colors duration-200 ${
+                  isCompleted && !isNegative
+                    ? 'text-slate-400 line-through decoration-slate-600'
+                    : 'text-slate-100'
+                }`}
+              >
                 {habitTitle}
               </h3>
               {habit.category && (
@@ -164,7 +167,6 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Milestone Dynamic Flame */}
           <div className={`flex items-center gap-1 border px-2 py-0.5 rounded-full text-xs font-semibold transition-all ${flameStyle.bg}`}>
             <Flame className={`w-3.5 h-3.5 ${flameStyle.icon}`} />
             <span>{streak}</span>
@@ -207,6 +209,7 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
             </div>
           )}
 
+          {/* Habit Menu with Click-Outside Backdrop */}
           <div className="relative">
             <button
               onClick={() => setShowMenu((prev) => !prev)}
@@ -215,16 +218,23 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
             >
               <MoreVertical className="w-4 h-4" />
             </button>
+
             {showMenu && (
-              <div className="absolute right-0 top-8 z-20 bg-slate-950 border border-slate-800 rounded-xl p-1 shadow-xl min-w-[110px]">
-                <button
-                  onClick={handleDelete}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Archive</span>
-                </button>
-              </div>
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowMenu(false)}
+                />
+                <div className="absolute right-0 top-8 z-20 bg-slate-950 border border-slate-800 rounded-xl p-1 shadow-2xl min-w-[110px]">
+                  <button
+                    onClick={handleDelete}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Archive</span>
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
