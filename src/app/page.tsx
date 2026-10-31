@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Shield, Plus, LogOut, Zap, Award } from 'lucide-react'
 import HabitCard from '@/components/HabitCard'
 import Heatmap from '@/components/Heatmap'
+import DailyProgressBar from '@/components/DailyProgressBar'
 import NewHabitModal from '@/components/NewHabitModal'
 import UpgradeModal from '@/components/UpgradeModal'
 
@@ -32,8 +33,10 @@ export default function Home() {
   const loadData = useCallback(async (userId: string, currentDate: string) => {
     if (!currentDate) return
 
+    // 1. Evaluate missed days & streak freezes
     await supabase.rpc('evaluate_daily_streak_freezes', { p_today: currentDate })
 
+    // 2. Fetch Profile
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
@@ -41,6 +44,7 @@ export default function Home() {
       .single()
     setProfile(profileData)
 
+    // 3. Fetch Active Habits
     const { data: habitData } = await supabase
       .from('habits')
       .select('*')
@@ -49,6 +53,7 @@ export default function Home() {
       .order('created_at', { ascending: true })
     setHabits(habitData || [])
 
+    // 4. Fetch Logs for Heatmap & today's status
     const { data: logData } = await supabase
       .from('habit_logs')
       .select('*')
@@ -93,7 +98,15 @@ export default function Home() {
     if (!error && data) {
       setLogs((prev) => {
         const filtered = prev.filter((l) => !(l.habit_id === habitId && l.log_date === today))
-        return [...filtered, { habit_id: habitId, log_date: today, current_value: data.current_value, status: data.status }]
+        return [
+          ...filtered,
+          {
+            habit_id: habitId,
+            log_date: today,
+            current_value: data.current_value,
+            status: data.status,
+          },
+        ]
       })
 
       setHabits((prev) =>
@@ -133,7 +146,6 @@ export default function Home() {
 
     if (!error) {
       await loadData(user.id, today)
-      // Automatically switch view to the created habit's category so it is immediately visible
       setSelectedCategory(habitPayload.category || 'All')
       return { success: true }
     } else {
@@ -200,6 +212,15 @@ export default function Home() {
     ? habits
     : habits.filter((h) => h.category === selectedCategory)
 
+  // Calculate completion velocity across active habits
+  const completedTodayCount = habits.filter((h) => {
+    const log = todayLogs.find((l) => l.habit_id === h.id)
+    if (h.habit_type === 'negative') {
+      return (log?.current_value ?? 0) === 0
+    }
+    return (log?.current_value ?? 0) >= (h.target_value ?? 1)
+  }).length
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 pb-28">
       <header className="sticky top-0 z-30 bg-slate-950/80 backdrop-blur-md border-b border-slate-800/80 px-4 py-3">
@@ -251,9 +272,17 @@ export default function Home() {
         </div>
       )}
 
-      <div className="max-w-md mx-auto px-4 mt-5 space-y-5">
+      <div className="max-w-md mx-auto px-4 mt-5 space-y-4">
+        {/* Heatmap Overview */}
         <Heatmap logs={logs} />
 
+        {/* Daily Completion Velocity Bar */}
+        <DailyProgressBar
+          total={habits.length}
+          completed={completedTodayCount}
+        />
+
+        {/* Habits Section */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -291,6 +320,7 @@ export default function Home() {
             ))}
           </div>
 
+          {/* Habit Cards List */}
           <div className="space-y-3">
             {filteredHabits.length === 0 ? (
               <div className="p-8 text-center border border-dashed border-slate-800 rounded-2xl">
@@ -312,6 +342,7 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Creation Modal */}
       <NewHabitModal
         isOpen={isModalOpen}
         initialCategory={selectedCategory !== 'All' ? selectedCategory : 'General'}
@@ -319,6 +350,7 @@ export default function Home() {
         onSave={handleCreateHabit}
       />
 
+      {/* Upgrade & Paywall Modal */}
       <UpgradeModal
         isOpen={isUpgradeOpen}
         onClose={() => setIsUpgradeOpen(false)}
