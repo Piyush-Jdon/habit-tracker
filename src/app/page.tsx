@@ -14,7 +14,6 @@ import { sounds } from '@/utils/sound'
 const CATEGORIES = ['All', 'General', 'Fitness', 'Productivity', 'Mindset', 'Health']
 const FREE_HABIT_LIMIT = 5
 
-// Local calendar date helper (prevents UTC drift)
 function getLocalTodayDate(): string {
   const d = new Date()
   const year = d.getFullYear()
@@ -94,8 +93,8 @@ export default function Home() {
     if (error) console.error('OAuth sign in error:', error.message)
   }
 
-  const handleProgress = async (habitId: string, delta: number) => {
-    if (!today) return
+  const handleProgress = async (habitId: string, delta: number): Promise<boolean> => {
+    if (!today) return false
 
     const { data, error } = await supabase.rpc('log_habit_progress', {
       p_habit_id: habitId,
@@ -103,7 +102,16 @@ export default function Home() {
       p_value_delta: delta,
     })
 
-    if (!error && data) {
+    if (error) {
+      console.error('Error logging habit progress:', error.message || error.details || error)
+      alert(`Could not save progress: ${error.message || 'Database error'}`)
+      return false
+    }
+
+    if (data) {
+      const result = Array.isArray(data) ? data[0] : data
+      if (!result) return false
+
       setLogs((prev) => {
         const filtered = prev.filter((l) => !(l.habit_id === habitId && l.log_date === today))
         return [
@@ -111,8 +119,8 @@ export default function Home() {
           {
             habit_id: habitId,
             log_date: today,
-            current_value: data.current_value,
-            status: data.status,
+            current_value: result.current_value,
+            status: result.status,
           },
         ]
       })
@@ -120,7 +128,7 @@ export default function Home() {
       setHabits((prev) =>
         prev.map((h) =>
           h.id === habitId
-            ? { ...h, current_streak: data.current_streak, longest_streak: data.longest_streak }
+            ? { ...h, current_streak: result.current_streak, longest_streak: result.longest_streak }
             : h
         )
       )
@@ -133,7 +141,10 @@ export default function Home() {
           .single()
         if (updatedProfile) setProfile(updatedProfile)
       }
+      return true
     }
+
+    return false
   }
 
   const handleOpenAddModal = () => {
@@ -185,21 +196,13 @@ export default function Home() {
 
   const completedTodayCount = habits.filter((h) => {
     const log = todayLogs.find((l) => l.habit_id === h.id)
-    if (h.habit_type === 'negative') {
-      return (log?.current_value ?? 0) === 0
-    }
-    return (log?.current_value ?? 0) >= (h.target_value ?? 1)
+    return log?.status === 'completed'
   }).length
 
-  // Trigger celebration when reaching 100% daily completion
   useEffect(() => {
     if (habits.length > 0 && completedTodayCount === habits.length && !hasCelebrated100Ref.current) {
       hasCelebrated100Ref.current = true
-      confetti({
-        particleCount: 100,
-        spread: 80,
-        origin: { y: 0.5 },
-      })
+      confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } })
       sounds.playSuccess()
     } else if (completedTodayCount < habits.length) {
       hasCelebrated100Ref.current = false

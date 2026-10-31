@@ -21,11 +21,11 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
 
   const habitTitle = habit?.title || habit?.name || 'Untitled Habit'
   const isNegative = habit?.habit_type === 'negative'
-  const currentValue = log?.current_value ?? 0
-  const targetValue = habit?.target_value ?? 1
-  const isCompleted = isNegative ? currentValue === 0 : currentValue >= targetValue
+  const currentValue = Number(log?.current_value ?? 0)
+  const targetValue = Math.max(1, Number(habit?.target_value ?? 1))
+  const isCompleted = log?.status === 'completed'
   const isQuantifiable = targetValue > 1 && !isNegative
-  const streak = habit?.current_streak ?? 0
+  const streak = Number(habit?.current_streak ?? 0)
 
   const getFlameBadge = () => {
     if (streak >= 30) {
@@ -61,42 +61,43 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
   }
 
   const handleToggle = async () => {
-    if (isNegative) {
-      if (currentValue === 0) {
-        sounds.playWarning()
-        triggerHaptic('warning')
-        await onProgress(habit.id, 1)
-      } else {
-        sounds.playPop()
-        triggerHaptic('light')
-        await onProgress(habit.id, -1)
-      }
-    } else {
-      if (!isCompleted) {
+    if (!isCompleted) {
+      const ok = await onProgress(habit.id, 1)
+      if (ok) {
         sounds.playSuccess()
         triggerHaptic('success')
-        confetti({ particleCount: 30, spread: 45, origin: { y: 0.8 } })
-        await onProgress(habit.id, 1)
+        confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } })
         await evaluateFreezeMilestone()
-      } else {
+      }
+    } else {
+      const ok = await onProgress(habit.id, -1)
+      if (ok) {
         sounds.playPop()
         triggerHaptic('light')
-        await onProgress(habit.id, -1)
       }
     }
   }
 
+  const handleLogSlip = async () => {
+    setShowMenu(false)
+    sounds.playWarning()
+    triggerHaptic('warning')
+    await onProgress(habit.id, -1)
+  }
+
   const handleIncrement = async (amount: number) => {
-    if (currentValue + amount >= targetValue && !isCompleted) {
-      sounds.playSuccess()
-      triggerHaptic('success')
-      confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } })
-      await evaluateFreezeMilestone()
-    } else {
-      sounds.playPop()
-      triggerHaptic('light')
+    const ok = await onProgress(habit.id, amount)
+    if (ok) {
+      if (currentValue + amount >= targetValue && !isCompleted) {
+        sounds.playSuccess()
+        triggerHaptic('success')
+        confetti({ particleCount: 35, spread: 50, origin: { y: 0.8 } })
+        await evaluateFreezeMilestone()
+      } else {
+        sounds.playPop()
+        triggerHaptic('light')
+      }
     }
-    await onProgress(habit.id, amount)
   }
 
   const handleDelete = async () => {
@@ -107,15 +108,17 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
     }
   }
 
-  const progressPercent = isNegative
-    ? currentValue === 0 ? 100 : 0
-    : Math.min(100, Math.round((currentValue / targetValue) * 100))
+  const progressPercent = isQuantifiable
+    ? Math.min(100, Math.round((currentValue / targetValue) * 100))
+    : isCompleted ? 100 : 0
 
   return (
     <div
       className={`relative rounded-2xl p-4 shadow-sm transition-all duration-300 border ${
         isCompleted
           ? 'bg-slate-900/60 border-emerald-500/30'
+          : log?.status === 'missed'
+          ? 'bg-rose-950/20 border-rose-500/30'
           : 'bg-slate-900 border-slate-800/80 hover:border-slate-700/80'
       }`}
     >
@@ -123,12 +126,10 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
         <div className="flex items-center gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm transition-transform duration-200 active:scale-95 ${
-              isNegative
-                ? currentValue === 0
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                : isCompleted
+              isCompleted
                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : log?.status === 'missed'
+                ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
                 : 'bg-slate-800 text-slate-300'
             }`}
           >
@@ -154,9 +155,11 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
             </div>
             <p className="text-xs text-slate-400">
               {isNegative
-                ? currentValue === 0
-                  ? 'Clean today'
-                  : 'Relapse recorded'
+                ? isCompleted
+                  ? 'Clean today ✨'
+                  : log?.status === 'missed'
+                  ? 'Slip recorded'
+                  : 'Tap to confirm clean today'
                 : isQuantifiable
                 ? `${currentValue} / ${targetValue} ${habit.unit || ''}`
                 : isCompleted
@@ -176,17 +179,15 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
             <button
               onClick={handleToggle}
               className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-90 ${
-                isNegative
-                  ? currentValue === 0
-                    ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-2 ring-emerald-400/20'
-                    : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                  : isCompleted
+                isCompleted
                   ? 'bg-emerald-500 text-slate-950 shadow-lg shadow-emerald-500/25 ring-2 ring-emerald-400/20'
+                  : log?.status === 'missed'
+                  ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
                   : 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-slate-600'
               }`}
             >
-              {isNegative ? (
-                currentValue === 0 ? <Check className="w-4 h-4 stroke-[2.5]" /> : <ShieldAlert className="w-4 h-4" />
+              {log?.status === 'missed' ? (
+                <ShieldAlert className="w-4 h-4" />
               ) : (
                 <Check className="w-4 h-4 stroke-[2.5]" />
               )}
@@ -209,7 +210,6 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
             </div>
           )}
 
-          {/* Habit Menu with Click-Outside Backdrop */}
           <div className="relative">
             <button
               onClick={() => setShowMenu((prev) => !prev)}
@@ -225,7 +225,16 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
                   className="fixed inset-0 z-10"
                   onClick={() => setShowMenu(false)}
                 />
-                <div className="absolute right-0 top-8 z-20 bg-slate-950 border border-slate-800 rounded-xl p-1 shadow-2xl min-w-[110px]">
+                <div className="absolute right-0 top-8 z-20 bg-slate-950 border border-slate-800 rounded-xl p-1 shadow-2xl min-w-[130px]">
+                  {isNegative && (
+                    <button
+                      onClick={handleLogSlip}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-amber-400 hover:bg-amber-500/10 rounded-lg transition-all"
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      <span>Log Slip</span>
+                    </button>
+                  )}
                   <button
                     onClick={handleDelete}
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all"
