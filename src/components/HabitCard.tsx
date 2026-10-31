@@ -10,7 +10,7 @@ import { createClient } from '@/utils/supabase/client'
 interface HabitCardProps {
   habit: any
   log?: any
-  onProgress: (habitId: string, delta: number) => Promise<void>
+  onProgress: (habitId: string, delta: number) => Promise<boolean>
   onArchive: (habitId: string) => Promise<void>
   onFreezeAwarded?: () => void
 }
@@ -80,9 +80,11 @@ export default function HabitCard({ habit, log, onProgress, onArchive, onFreezeA
 
   const handleLogSlip = async () => {
     setShowMenu(false)
-    sounds.playWarning()
-    triggerHaptic('warning')
-    await onProgress(habit.id, -1)
+    const ok = await onProgress(habit.id, -1)
+    if (ok) {
+      sounds.playWarning()
+      triggerHaptic('warning')
+    }
   }
 
   const handleIncrement = async (amount: number) => {
